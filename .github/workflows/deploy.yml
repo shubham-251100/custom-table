@@ -1,0 +1,56 @@
+name: Deploy React App (Blue-Green)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build React app
+        run: npm run build
+
+      - name: Decide target bucket
+        id: bucket
+        run: |
+          if [ "${{ vars.LIVE_COLOR }}" = "blue" ]; then
+            echo "TARGET_BUCKET=${{ secrets.S3_GREEN_BUCKET }}" >> $GITHUB_ENV
+            echo "NEXT_COLOR=green" >> $GITHUB_ENV
+          else
+            echo "TARGET_BUCKET=${{ secrets.S3_BLUE_BUCKET }}" >> $GITHUB_ENV
+            echo "NEXT_COLOR=blue" >> $GITHUB_ENV
+          fi
+
+      - name: Upload to S3
+        uses: aws-actions/s3-sync@v1
+        with:
+          bucket: ${{ env.TARGET_BUCKET }}
+          source-dir: build
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      - name: Invalidate CloudFront
+        uses: aws-actions/aws-cloudfront-invalidate@v1
+        with:
+          distribution-id: ${{ secrets.CLOUDFRONT_ID }}
+          paths: "/*"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
