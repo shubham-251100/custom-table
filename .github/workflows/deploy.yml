@@ -1,16 +1,15 @@
-name: Deploy React App (Blue-Green)
+name: Deploy React (Blue-Green)
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node
@@ -18,39 +17,33 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm install
 
-      - name: Build React app
+      - name: Build
         run: npm run build
 
-      - name: Decide target bucket
-        id: bucket
+      - name: Pick target bucket
         run: |
           if [ "${{ vars.LIVE_COLOR }}" = "blue" ]; then
-            echo "TARGET_BUCKET=${{ secrets.S3_GREEN_BUCKET }}" >> $GITHUB_ENV
-            echo "NEXT_COLOR=green" >> $GITHUB_ENV
+            echo "TARGET=${{ secrets.S3_GREEN_BUCKET }}" >> $GITHUB_ENV
           else
-            echo "TARGET_BUCKET=${{ secrets.S3_BLUE_BUCKET }}" >> $GITHUB_ENV
-            echo "NEXT_COLOR=blue" >> $GITHUB_ENV
+            echo "TARGET=${{ secrets.S3_BLUE_BUCKET }}" >> $GITHUB_ENV
           fi
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Upload to S3
-        uses: aws-actions/s3-sync@v1
-        with:
-          bucket: ${{ env.TARGET_BUCKET }}
-          source-dir: build
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          aws s3 sync build s3://$TARGET --delete
 
-      - name: Invalidate CloudFront
-        uses: aws-actions/aws-cloudfront-invalidate@v1
-        with:
-          distribution-id: ${{ secrets.CLOUDFRONT_ID }}
-          paths: "/*"
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_ID }} \
+            --paths "/*"
