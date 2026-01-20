@@ -1,8 +1,10 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { MultiSelectDropdown } from "../dropdown";
 import "./index.css";
 
-const checkedStatus = ["CHECK", "HIDDEN", "DISABLED"];
+/* =======================
+   Types
+======================= */
 
 const pData = {
   config: {
@@ -451,17 +453,65 @@ const pData = {
       city: "Delhi",
     },
   ],
+} satisfies {
+  config: TableConfig;
+  data: TableRow[];
 };
+
+type DynamicColumnStatus = "CHECK" | "HIDDEN" | "DISABLED" | "UNCHECK";
+
+export interface ColumnConfig {
+  id: string;
+  header: string;
+  accessor: string;
+  dynamicColumn: DynamicColumnStatus;
+  isShow: boolean;
+}
+
+export type TableConfig = Record<string, ColumnConfig>;
+
+export interface TableRow {
+  [key: string]: string | number;
+}
+
+export interface DropdownOption {
+  label: string;
+  value: string;
+  id: string;
+}
+
+interface TableProps {
+  config?: TableConfig;
+  data?: TableRow[];
+  hideHeader?: boolean;
+  rowHeight?: number;
+}
+
+/* =======================
+   Constants
+======================= */
+
+const checkedStatus: DynamicColumnStatus[] = [
+  "CHECK",
+  "HIDDEN",
+  "DISABLED",
+];
+
+/* =======================
+   Component
+======================= */
 
 export const Table = ({
   config = pData.config,
   data = pData.data,
   hideHeader = true,
   rowHeight = 200,
-}) => {
-  const wrapperRef = useRef(null);
+}: TableProps) => {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  const options = useMemo(() => {
+  const options: DropdownOption[] = useMemo(() => {
+    if (!config) return [];
+
     return Object.keys(config)
       .filter((key) => config[key].isShow)
       .map((key) => ({
@@ -471,31 +521,34 @@ export const Table = ({
       }));
   }, [config]);
 
-  const [selected, setSelected] = useState(
+  const [selected, setSelected] = useState<DropdownOption[]>(() =>
     options.filter(({ id }) =>
-      checkedStatus.includes(config[id].dynamicColumn),
+      config ? checkedStatus.includes(config[id].dynamicColumn) : false,
     ),
   );
 
-  const [scrollTop, setScrollTop] = useState(0);
+  const [scrollTop, setScrollTop] = useState<number>(0);
 
   /** CONFIG **/
   const viewportHeight = 600;
-  const totalRows = data.length;
+  const totalRows = data?.length ?? 0;
   const totalHeight = totalRows * rowHeight;
   const visibleRowCount = Math.ceil(viewportHeight / rowHeight);
   const overscan = 5;
 
   /** DERIVED **/
-  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const startIndex = Math.max(
+    0,
+    Math.floor(scrollTop / rowHeight) - overscan,
+  );
+
   const endIndex = Math.min(
     totalRows,
     startIndex + visibleRowCount + overscan * 2,
   );
 
   const offsetY = startIndex * rowHeight;
-
-  const visibleRows = data.slice(startIndex, endIndex);
+  const visibleRows = data?.slice(startIndex, endIndex) ?? [];
   const tableHeaderToShow = selected.map(({ value }) => value);
 
   useEffect(() => {
@@ -524,19 +577,17 @@ export const Table = ({
       )}
 
       <div className="table-scroll-area">
-        {/* SPACER */}
         <div className="spacer" style={{ height: totalHeight }} />
 
-        {/* TABLE LAYER */}
         <div
           className="table-layer"
           style={{ transform: `translateY(${offsetY}px)` }}
         >
-          <table className="table" border="1" cellPadding="8">
+          <table className="table" border={1} cellPadding={8}>
             <thead className="table-head">
               <tr>
                 {tableHeaderToShow.map((key) => (
-                  <th key={key}>{config[key].header}</th>
+                  <th key={key}>{config?.[key].header}</th>
                 ))}
               </tr>
             </thead>
@@ -545,7 +596,9 @@ export const Table = ({
               {visibleRows.map((item, idx) => (
                 <tr key={startIndex + idx} style={{ height: rowHeight }}>
                   {tableHeaderToShow.map((key) => (
-                    <td key={key}>{item[config[key].accessor]}</td>
+                    <td key={key}>
+                      {item[config?.[key].accessor ?? ""]}
+                    </td>
                   ))}
                 </tr>
               ))}
